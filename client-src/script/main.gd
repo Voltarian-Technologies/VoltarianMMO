@@ -1,6 +1,5 @@
 extends Control
 
-<<<<<<< HEAD
 # Use your secure WebSocket server
 const SERVER: String = "wss://ws.voltaccept.com"
 
@@ -15,20 +14,6 @@ var my_id: String = ""
 
 
 func _ready() -> void:
-=======
-const SERVER = "wss://ws.voltaccept.com"
-
-@onready var _join_btn = $Panel/VBoxContainer/HBoxContainer2/HBoxContainer/Join
-@onready var _leave_btn = $Panel/VBoxContainer/HBoxContainer2/HBoxContainer/Leave
-@onready var _name_edit = $Panel/VBoxContainer/HBoxContainer/NameEdit
-@onready var _game = $Panel/VBoxContainer/Game
-
-var ws := WebSocketPeer.new()
-var connected = false
-
-
-func _ready():
->>>>>>> 2674bf227fb70ff5ac024dd8d62ef487730906e0
 	$AcceptDialog.get_label().horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	$AcceptDialog.get_label().vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
@@ -36,17 +21,12 @@ func _ready():
 		_name_edit.text = OS.get_environment("USERNAME")
 
 
-<<<<<<< HEAD
 func _process(delta: float) -> void:
-=======
-func _process(delta):
->>>>>>> 2674bf227fb70ff5ac024dd8d62ef487730906e0
 	if not connected:
 		return
 
 	ws.poll()
 
-<<<<<<< HEAD
 	# detect disconnect
 	var state: int = ws.get_ready_state()
 	if state == WebSocketPeer.STATE_CLOSED:
@@ -102,79 +82,36 @@ func _handle_server_message(data: Dictionary) -> void:
 
 
 func start_game() -> void:
-=======
-	while ws.get_available_packet_count() > 0:
-		var msg = ws.get_packet().get_string_from_utf8()
-		var data = JSON.parse_string(msg)
-
-		if typeof(data) == TYPE_DICTIONARY:
-			_game.handle_network_message(data)
-
-
-func start_game():
->>>>>>> 2674bf227fb70ff5ac024dd8d62ef487730906e0
 	_name_edit.editable = false
 	_join_btn.hide()
 	_leave_btn.show()
 	_game.start()
 
 
-<<<<<<< HEAD
 func stop_game() -> void:
-=======
-func stop_game():
->>>>>>> 2674bf227fb70ff5ac024dd8d62ef487730906e0
 	_name_edit.editable = true
 	_leave_btn.hide()
 	_join_btn.show()
 	_game.stop()
 
 
-<<<<<<< HEAD
 func _close_network() -> void:
 	if connected:
 		ws.close()
 	connected = false
 	stop_game()
-=======
-func _close_network():
-	stop_game()
-	connected = false
-	ws.close()
->>>>>>> 2674bf227fb70ff5ac024dd8d62ef487730906e0
 	$AcceptDialog.popup_centered()
 	$AcceptDialog.get_ok_button().grab_focus()
 
 
-<<<<<<< HEAD
 func _on_Leave() -> void:
-=======
-func _on_Leave():
->>>>>>> 2674bf227fb70ff5ac024dd8d62ef487730906e0
 	_close_network()
 
 
 func _on_Join() -> void:
-<<<<<<< HEAD
 	var err: int = ws.connect_to_url(SERVER)
 	if err != OK:
 		print("Failed to connect to secure WebSocket!")
 		return
 	connected = true
 	start_game()
-=======
-	var err = ws.connect_to_url(SERVER)
-	if err != OK:
-		print("Failed to connect!")
-		return
-
-	connected = true
-	start_game()
-
-	# Send login message
-	var packet = {
-		"type": "join",
-		"name": _name_edit.text
-	}
-	ws.send_text(JSON.stringify(packet))
->>>>>>> 2674bf227fb70ff5ac024dd8d62ef487730906e0
