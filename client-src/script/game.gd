@@ -15,9 +15,10 @@ var is_jumping: bool = false
 var is_moving_left: bool = false
 var is_moving_right: bool = false
 var last_sent_position: Vector2 = Vector2.ZERO
+var _space_was_pressed: bool = false
 
 const GRAVITY: float = 600.0
-const GROUND_Y: float = 300.0
+var GROUND_Y: float = 300.0 # updated dynamically from canvas size
 const MOVE_SPEED: float = 200.0
 const JUMP_VELOCITY: float = -350.0
 const POSITION_SEND_THRESHOLD: float = 5.0
@@ -28,6 +29,7 @@ const CAMERA_EDGE_THRESHOLD: float = 200.0
 
 var camera_offset: Vector2 = Vector2.ZERO
 var canvas_center: Vector2 = Vector2(400, 300)
+const SPRITE_HALF_HEIGHT: float = 25.0
 
 
 func _ready() -> void:
@@ -36,6 +38,13 @@ func _ready() -> void:
 				_canvas.custom_minimum_size = Vector2(800, 600)
 				_canvas.clip_contents = true
 				$HBoxContainer.add_child(_canvas)
+
+		# set canvas-based ground and center at startup
+		if _canvas:
+			canvas_center = _canvas.size / 2.0
+			GROUND_Y = _canvas.size.y - SPRITE_HALF_HEIGHT
+			# Ensure player starts on the ground
+			my_position.y = GROUND_Y
 
 
 func _input(event: InputEvent) -> void:
@@ -50,6 +59,15 @@ func _input(event: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 		var old_position = my_position
+
+		# recompute view metrics and ground from canvas, this supports window resizing
+		var view_width: float = 800.0
+		var view_height: float = 600.0
+		if _canvas:
+			view_width = _canvas.size.x
+			view_height = _canvas.size.y
+			canvas_center = _canvas.size / 2.0
+			GROUND_Y = view_height - SPRITE_HALF_HEIGHT
 		
 		if is_moving_left:
 				my_position.x -= MOVE_SPEED * delta
@@ -58,7 +76,9 @@ func _process(delta: float) -> void:
 		
 		my_position.x = clamp(my_position.x, 0.0, MAP_WIDTH)
 		
-		if is_jumping or velocity_y != 0.0:
+		# If the player is above the ground, make sure gravity applies so
+		# a reconnected player that was in the air will fall back down.
+		if my_position.y < GROUND_Y or is_jumping or velocity_y != 0.0:
 				velocity_y += GRAVITY * delta
 				my_position.y += velocity_y * delta
 				
@@ -73,10 +93,18 @@ func _process(delta: float) -> void:
 		if my_position.distance_to(last_sent_position) > POSITION_SEND_THRESHOLD:
 				_send_position_update()
 				last_sent_position = my_position
+
+		# Global Space key check to trigger jump even when UI has focus
+		var space_pressed: bool = Input.is_key_pressed(KEY_SPACE)
+		if space_pressed and not _space_was_pressed:
+			# just pressed
+			action_jump()
+			# notify network about the action if this is the player's jump
+			if my_id != "":
+				_emit_packet({"type": "action", "action": "jump"})
+		_space_was_pressed = space_pressed
 		
 		var target_camera_offset = Vector2.ZERO
-		var view_width: float = 800.0
-		var view_height: float = 600.0
 		
 		if my_position.x < CAMERA_EDGE_THRESHOLD:
 			target_camera_offset.x = -my_position.x
@@ -91,7 +119,7 @@ func _process(delta: float) -> void:
 				var node_data = player_nodes[player_id]
 				if node_data.sprite:
 						var screen_pos = node_data.target_pos - camera_offset
-						var target_sprite_pos = Vector2(screen_pos.x - 25, screen_pos.y - 25)
+						var target_sprite_pos = Vector2(screen_pos.x - SPRITE_HALF_HEIGHT, screen_pos.y - SPRITE_HALF_HEIGHT)
 						node_data.sprite.position = node_data.sprite.position.lerp(target_sprite_pos, delta * 10.0)
 						if node_data.label:
 								node_data.label.position = node_data.sprite.position + Vector2(-50, -30)
@@ -103,6 +131,13 @@ func start() -> void:
 		players.clear()
 		if _action:
 				_action.disabled = false
+		# Reset movement state on start
+		is_moving_left = false
+		is_moving_right = false
+		is_jumping = false
+		velocity_y = 0.0
+		last_sent_position = my_position
+		_space_was_pressed = false
 
 
 func stop() -> void:
@@ -114,6 +149,12 @@ func stop() -> void:
 		for player_id in player_nodes:
 				remove_player_sprite(player_id)
 		player_nodes.clear()
+		# Reset movement state on stop to avoid carrying it over when reconnecting
+		is_moving_left = false
+		is_moving_right = false
+		is_jumping = false
+		velocity_y = 0.0
+		_space_was_pressed = false
 
 
 func set_player_list(player_array: Array) -> void:
@@ -127,7 +168,7 @@ func set_player_list(player_array: Array) -> void:
 						_list.set_item_tooltip(idx, "UUID: " + p["id"] + "\nOS User: " + p.get("os_username", "unknown"))
 				
 				if not player_nodes.has(p["id"]):
-						create_player_sprite(p["id"], p["name"], p.get("position", {"x": 400, "y": 300}))
+					create_player_sprite(p["id"], p["name"], p.get("position", {"x": 400, "y": GROUND_Y}))
 				else:
 						update_player_label(p["id"], p["name"])
 
@@ -138,9 +179,9 @@ func create_player_sprite(player_id: String, player_name: String, pos: Dictionar
 		
 		var sprite = ColorRect.new()
 		sprite.size = Vector2(50, 50)
-		var world_pos = Vector2(pos.get("x", 400), pos.get("y", 300))
+		var world_pos = Vector2(pos.get("x", 400), pos.get("y", GROUND_Y))
 		var screen_pos = world_pos - camera_offset
-		sprite.position = Vector2(screen_pos.x - 25, screen_pos.y - 25)
+		sprite.position = Vector2(screen_pos.x - SPRITE_HALF_HEIGHT, screen_pos.y - SPRITE_HALF_HEIGHT)
 		
 		if player_id == my_id:
 				sprite.color = Color(0.2, 0.8, 0.2)
@@ -168,7 +209,7 @@ func create_player_sprite(player_id: String, player_name: String, pos: Dictionar
 
 func update_player_position(player_id: String, pos: Dictionary) -> void:
 		if player_nodes.has(player_id):
-				var new_pos = Vector2(pos.get("x", 400), pos.get("y", 300))
+				var new_pos = Vector2(pos.get("x", 400), pos.get("y", GROUND_Y))
 				player_nodes[player_id].target_pos = new_pos
 
 
@@ -197,8 +238,14 @@ func _emit_packet(packet: Dictionary) -> void:
 
 func action_jump() -> void:
 		if not is_jumping and my_position.y >= GROUND_Y:
-				velocity_y = JUMP_VELOCITY
-				is_jumping = true
+			velocity_y = JUMP_VELOCITY
+			is_jumping = true
+			# Notify server of action so other clients are aware
+			var packet: Dictionary = {
+				"type": "action",
+				"action": "jump"
+			}
+			_emit_packet(packet)
 
 
 func _send_position_update() -> void:
@@ -212,3 +259,25 @@ func _send_position_update() -> void:
 
 func _on_Action_pressed() -> void:
 		action_jump()
+		# also notify the server about the action when the UI button was used
+		if my_id != "":
+			_emit_packet({"type": "action", "action": "jump"})
+
+
+func set_my_position(pos: Vector2) -> void:
+	my_position = pos
+	# Reset horizontal movement flags to avoid being stuck if reconnecting while pressing keys
+	is_moving_left = false
+	is_moving_right = false
+	last_sent_position = my_position
+	# Make sure local player sprite interpolation updates to new position
+	if player_nodes.has(my_id):
+		player_nodes[my_id].target_pos = my_position
+	# Apply proper state for reconnects: if player is above ground, ensure gravity will apply
+	if my_position.y < GROUND_Y:
+		is_jumping = true
+		# starting falling from rest
+		velocity_y = 0.0
+	else:
+		is_jumping = false
+		velocity_y = 0.0

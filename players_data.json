@@ -1,11 +1,11 @@
 {
   "stayd": {
     "uuid": "24b8ae71-4b9f-53ea-a9ea-ca510c539cbe",
-    "display_name": "VoltacceptYT",
+    "display_name": "stayd",
     "os_username": "stayd",
     "position": {
-      "x": 383.296844482422,
-      "y": 294.317901611328
+      "x": 549.993408203125,
+      "y": 300.0
     }
   }
 }

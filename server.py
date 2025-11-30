@@ -8,6 +8,7 @@ import os
 
 HOST = "localhost"
 PORT = 8765
+GROUND_Y = 300.0
 
 connected_players = {}  # ws -> player_data
 persistent_players = {}  # os_username -> {"uuid": str, "display_name": str, "position": dict}
@@ -218,6 +219,10 @@ async def handle_client(ws):
                     f"[ACTION] {player_data['display_name']}: {action} -> {pos}"
                 )
 
+                # Log specifically for jump actions for easier debugging
+                if action == "jump":
+                    print(f"[JUMP] {player_data['display_name']} jumped to {pos}")
+
                 # Broadcast position update to all clients
                 await broadcast({
                     "type": "position_update",
@@ -241,6 +246,7 @@ async def handle_client(ws):
                         "position": player_data["position"]
                     },
                     except_ws=ws)
+                print(f"[POS UPDATE] {player_data['display_name']} -> x={x}, y={y}")
 
             else:
                 print("[WARN] Unknown type:", typ)
@@ -254,6 +260,14 @@ async def handle_client(ws):
             print(
                 f"[DISCONNECT] {player_data['display_name']} ({player_data['os_username']})"
             )
+
+            # Save player position; if disconnecting while in the air, clamp to ground
+            try:
+                if player_data.get("position") and player_data["position"].get("y") < GROUND_Y:
+                    player_data["position"]["y"] = GROUND_Y
+                    save_persistent_data()
+            except Exception:
+                pass
 
             # Remove from connected players
             if ws in connected_players:

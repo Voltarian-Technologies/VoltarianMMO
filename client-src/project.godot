@@ -10,8 +10,8 @@ config_version=5
 
 [application]
 
-config/name="client-src"
-config/description="This is a sample showing how the use WebSockets along with the Multiplayer API in Godot."
+config/name="Voltarian MMO"
+config/description="A MMO Created by Voltarian Technologies using Godot "
 config/tags=PackedStringArray("demo", "network", "official")
 run/main_scene="res://scene/combo.tscn"
 config/features=PackedStringArray("4.4")
@@ -19,9 +19,12 @@ config/icon="res://icon.webp"
 
 [display]
 
-window/size/mode=3
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
+
+[gui]
+
+theme/custom_font="uid://2svqk7v8x61t"
 
 [rendering]
 

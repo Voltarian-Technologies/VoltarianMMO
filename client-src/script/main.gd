@@ -69,10 +69,10 @@ func _handle_server_message(data: Dictionary) -> void:
 						_game.my_id = my_id
 						
 						if data.has("position"):
-								_game.my_position = Vector2(
-										data["position"].get("x", 400),
-										data["position"].get("y", 300)
-								)
+							_game.set_my_position(Vector2(
+								data["position"].get("x", 400),
+								data["position"].get("y", _game.GROUND_Y)
+							))
 
 				"player_joined":
 						_game.handle_network_message({"name": "%s joined" % data["name"]})
