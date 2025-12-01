@@ -17,6 +17,8 @@ var is_moving_right: bool = false
 var last_sent_position: Vector2 = Vector2.ZERO
 var _space_was_pressed: bool = false
 var horizontal_velocity: float = 0.0
+var jump_boost_velocity: float = 0.0 # New: Stores horizontal velocity at jump start
+var is_boost_jumping: bool = false # New: True when in a boosted jump
 
 const GRAVITY: float = 600.0
 var GROUND_Y: float = 300.0 # updated dynamically from canvas size
@@ -24,7 +26,7 @@ const MOVE_SPEED: float = 200.0
 const JUMP_VELOCITY: float = -350.0
 const POSITION_SEND_THRESHOLD: float = 5.0
 
-const MAP_WIDTH: float = 2000.0
+var MAP_WIDTH: float
 const MAP_HEIGHT: float = 800.0
 const CAMERA_EDGE_THRESHOLD: float = 200.0
 const ACCELERATION: float = 800.0
@@ -35,6 +37,7 @@ const TURN_THRESHOLD: float = 50.0
 var camera_offset: Vector2 = Vector2.ZERO
 var canvas_center: Vector2 = Vector2(400, 300)
 const SPRITE_HALF_HEIGHT: float = 25.0
+const SPRITE_HALF_WIDTH: float = 25.0
 
 
 func _ready() -> void:
@@ -73,21 +76,25 @@ func _process(delta: float) -> void:
 			view_height = _canvas.size.y
 			canvas_center = _canvas.size / 2.0
 			GROUND_Y = view_height - SPRITE_HALF_HEIGHT
+			MAP_WIDTH = view_width
 		
 		var input_direction: float = 0.0
-		if is_moving_right:
-			input_direction += 1.0
-		if is_moving_left:
-			input_direction -= 1.0
+		if not is_boost_jumping: # Only process input if not boost jumping
+			if is_moving_right:
+				input_direction += 1.0
+			if is_moving_left:
+				input_direction -= 1.0
 
-		if input_direction != 0:
+		if is_boost_jumping: # If boost jumping, maintain boost velocity
+			horizontal_velocity = jump_boost_velocity
+		elif input_direction != 0: # Normal movement with input
 			horizontal_velocity = move_toward(horizontal_velocity, input_direction * MAX_SPEED, ACCELERATION * delta)
-		else:
+		elif not is_jumping: # Apply friction only if not jumping and no input
 			horizontal_velocity = move_toward(horizontal_velocity, 0, FRICTION * delta)
 
 		# Apply horizontal velocity
 		my_position.x += horizontal_velocity * delta
-		my_position.x = clamp(my_position.x, 0.0, MAP_WIDTH)
+		my_position.x = clamp(my_position.x, SPRITE_HALF_WIDTH, MAP_WIDTH - SPRITE_HALF_WIDTH)
 		
 		# If the player is above the ground, make sure gravity applies so
 		# a reconnected player that was in the air will fall back down.
@@ -99,6 +106,7 @@ func _process(delta: float) -> void:
 						my_position.y = GROUND_Y
 						velocity_y = 0.0
 						is_jumping = false
+						is_boost_jumping = false # Reset boost jumping flag on landing
 		
 		if player_nodes.has(my_id):
 				player_nodes[my_id].target_pos = my_position
@@ -128,7 +136,11 @@ func _process(delta: float) -> void:
 
 				var screen_pos = node_data.target_pos - camera_offset
 				var target_sprite_pos = Vector2(screen_pos.x - SPRITE_HALF_HEIGHT, screen_pos.y - SPRITE_HALF_HEIGHT)
-				player_node.position = player_node.position.lerp(target_sprite_pos, delta * 10.0)
+				
+				if player_id == my_id:
+						player_node.position = target_sprite_pos
+				else:
+						player_node.position = player_node.position.lerp(target_sprite_pos, delta * 10.0)
 
 				var velocity = (node_data.target_pos - node_data.last_pos) / delta
 				node_data.last_pos = node_data.target_pos
@@ -290,6 +302,8 @@ func action_jump() -> void:
 		if not is_jumping and my_position.y >= GROUND_Y:
 			velocity_y = JUMP_VELOCITY
 			is_jumping = true
+			is_boost_jumping = true # Set boost jumping flag
+			jump_boost_velocity = horizontal_velocity # Store current horizontal velocity
 			# Notify server of action so other clients are aware
 			var packet: Dictionary = {
 				"type": "action",
