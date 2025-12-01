@@ -12,7 +12,7 @@ config_version=5
 
 config/name="Voltarian MMO"
 config/description="A MMO Created by Voltarian Technologies using Godot "
-config/tags=PackedStringArray("MMO", "VoltaTECH", "WebSocket")
+config/tags=PackedStringArray("MassivelyMultiplayerOnline", "VoltarianTechnologies", "WebSockets")
 run/main_scene="res://scene/combo.tscn"
 config/features=PackedStringArray("4.4")
 config/icon="res://icon.webp"
