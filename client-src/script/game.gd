@@ -214,6 +214,10 @@ func create_player_sprite(player_id: String, player_name: String, pos: Dictionar
 				return
 
 		var player_node = PLAYER_SCENE.instantiate()
+		# It's important to add the node to the scene tree BEFORE trying to access its
+		# children via @onready vars, otherwise they will be null.
+		_canvas.add_child(player_node)
+
 		var world_pos = Vector2(pos.get("x", 400), pos.get("y", GROUND_Y))
 		var screen_pos = world_pos - camera_offset
 		player_node.position = Vector2(screen_pos.x - SPRITE_HALF_HEIGHT, screen_pos.y - SPRITE_HALF_HEIGHT)
@@ -224,8 +228,6 @@ func create_player_sprite(player_id: String, player_name: String, pos: Dictionar
 				player_node.set_color(Color(0.2, 0.8, 0.2))
 		else:
 				player_node.set_color(Color(1, 1, 1)) # Other players are not tinted
-		
-		_canvas.add_child(player_node)
 		
 		player_nodes[player_id] = {
 				"node": player_node,

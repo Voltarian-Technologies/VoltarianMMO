@@ -14,10 +14,10 @@ func set_player_name(new_name: String) -> void:
 	label.text = new_name
 
 func update_animation() -> void:
-	if is_jumping:
-		animated_sprite.play("jump")
-	elif is_falling:
+	if is_falling:
 		animated_sprite.play("fall")
+	elif is_jumping:
+		animated_sprite.play("jump")
 	elif is_moving:
 		animated_sprite.play("run")
 	else:
@@ -25,7 +25,8 @@ func update_animation() -> void:
 
 func set_color(color: Color) -> void:
 	# This function is for distinguishing the local player
-	animated_sprite.modulate = color
+	# animated_sprite.modulate = color
+	pass
 
 func face_left(face: bool) -> void:
 	animated_sprite.flip_h = face
