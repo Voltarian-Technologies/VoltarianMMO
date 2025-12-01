@@ -16,6 +16,7 @@ var is_moving_left: bool = false
 var is_moving_right: bool = false
 var last_sent_position: Vector2 = Vector2.ZERO
 var _space_was_pressed: bool = false
+var horizontal_velocity: float = 0.0
 
 const GRAVITY: float = 600.0
 var GROUND_Y: float = 300.0 # updated dynamically from canvas size
@@ -26,6 +27,10 @@ const POSITION_SEND_THRESHOLD: float = 5.0
 const MAP_WIDTH: float = 2000.0
 const MAP_HEIGHT: float = 800.0
 const CAMERA_EDGE_THRESHOLD: float = 200.0
+const ACCELERATION: float = 800.0
+const FRICTION: float = 1000.0
+const MAX_SPEED: float = 200.0
+const TURN_THRESHOLD: float = 50.0
 
 var camera_offset: Vector2 = Vector2.ZERO
 var canvas_center: Vector2 = Vector2(400, 300)
@@ -69,11 +74,19 @@ func _process(delta: float) -> void:
 			canvas_center = _canvas.size / 2.0
 			GROUND_Y = view_height - SPRITE_HALF_HEIGHT
 		
-		if is_moving_left:
-				my_position.x -= MOVE_SPEED * delta
+		var input_direction: float = 0.0
 		if is_moving_right:
-				my_position.x += MOVE_SPEED * delta
-		
+			input_direction += 1.0
+		if is_moving_left:
+			input_direction -= 1.0
+
+		if input_direction != 0:
+			horizontal_velocity = move_toward(horizontal_velocity, input_direction * MAX_SPEED, ACCELERATION * delta)
+		else:
+			horizontal_velocity = move_toward(horizontal_velocity, 0, FRICTION * delta)
+
+		# Apply horizontal velocity
+		my_position.x += horizontal_velocity * delta
 		my_position.x = clamp(my_position.x, 0.0, MAP_WIDTH)
 		
 		# If the player is above the ground, make sure gravity applies so
@@ -104,16 +117,7 @@ func _process(delta: float) -> void:
 				_emit_packet({"type": "action", "action": "jump"})
 		_space_was_pressed = space_pressed
 		
-		var target_camera_offset = Vector2.ZERO
-		
-		if my_position.x < CAMERA_EDGE_THRESHOLD:
-			target_camera_offset.x = -my_position.x
-		elif my_position.x > MAP_WIDTH - CAMERA_EDGE_THRESHOLD:
-			target_camera_offset.x = view_width - (MAP_WIDTH - my_position.x)
-		else:
-			target_camera_offset.x = -(canvas_center.x - view_width / 2.0)
-		
-		camera_offset = target_camera_offset
+
 		
 		for player_id in player_nodes:
 				var node_data = player_nodes[player_id]
@@ -149,13 +153,29 @@ func _process(delta: float) -> void:
 						player_node.is_falling = false
 
 				if player_id == my_id:
-						player_node.is_moving = is_moving_left or is_moving_right
-						player_node.is_jumping = is_jumping
-						player_node.is_falling = my_position.y < GROUND_Y and velocity_y > 0
-						if is_moving_left:
-								player_node.face_left(true)
-						elif is_moving_right:
-								player_node.face_left(false)
+						var player_node_local = player_node # Renamed for clarity within this scope
+						
+						# Determine if player is currently 'moving' (either by input or by sliding)
+						player_node_local.is_moving = input_direction != 0 or abs(horizontal_velocity) > 1.0
+						player_node_local.is_jumping = is_jumping
+						player_node_local.is_falling = my_position.y < GROUND_Y and velocity_y > 0
+						
+						# Turn-around logic
+						var should_turn = false
+						if input_direction == 1.0 and horizontal_velocity < -TURN_THRESHOLD: # Moving left, wants to go right
+							should_turn = true
+						elif input_direction == -1.0 and horizontal_velocity > TURN_THRESHOLD: # Moving right, wants to go left
+							should_turn = true
+
+						if should_turn and not player_node_local.is_turning:
+							player_node_local.turn_around()
+
+						# Face direction logic (only if not turning)
+						if not player_node_local.is_turning:
+							if horizontal_velocity < 0: # If moving left or sliding left
+								player_node_local.face_left(true)
+							elif horizontal_velocity > 0: # If moving right or sliding right
+								player_node_local.face_left(false)
 
 
 func start() -> void:
@@ -169,6 +189,7 @@ func start() -> void:
 		is_moving_right = false
 		is_jumping = false
 		velocity_y = 0.0
+		horizontal_velocity = 0.0
 		last_sent_position = my_position
 		_space_was_pressed = false
 
@@ -187,6 +208,7 @@ func stop() -> void:
 		is_moving_right = false
 		is_jumping = false
 		velocity_y = 0.0
+		horizontal_velocity = 0.0
 		_space_was_pressed = false
 
 
