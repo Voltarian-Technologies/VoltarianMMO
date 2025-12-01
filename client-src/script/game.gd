@@ -117,12 +117,45 @@ func _process(delta: float) -> void:
 		
 		for player_id in player_nodes:
 				var node_data = player_nodes[player_id]
-				if node_data.sprite:
-						var screen_pos = node_data.target_pos - camera_offset
-						var target_sprite_pos = Vector2(screen_pos.x - SPRITE_HALF_HEIGHT, screen_pos.y - SPRITE_HALF_HEIGHT)
-						node_data.sprite.position = node_data.sprite.position.lerp(target_sprite_pos, delta * 10.0)
-						if node_data.label:
-								node_data.label.position = node_data.sprite.position + Vector2(-50, -30)
+				var player_node = node_data.node
+
+				if not is_instance_valid(player_node):
+						continue
+
+				var screen_pos = node_data.target_pos - camera_offset
+				var target_sprite_pos = Vector2(screen_pos.x - SPRITE_HALF_HEIGHT, screen_pos.y - SPRITE_HALF_HEIGHT)
+				player_node.position = player_node.position.lerp(target_sprite_pos, delta * 10.0)
+
+				var velocity = (node_data.target_pos - node_data.last_pos) / delta
+				node_data.last_pos = node_data.target_pos
+
+				if abs(velocity.x) > 1.0:
+						player_node.is_moving = true
+						if velocity.x < 0:
+								player_node.face_left(true)
+						else:
+								player_node.face_left(false)
+				else:
+						player_node.is_moving = false
+
+				if velocity.y < -1.0:
+						player_node.is_jumping = true
+						player_node.is_falling = false
+				elif velocity.y > 1.0:
+						player_node.is_jumping = false
+						player_node.is_falling = true
+				else:
+						player_node.is_jumping = false
+						player_node.is_falling = false
+
+				if player_id == my_id:
+						player_node.is_moving = is_moving_left or is_moving_right
+						player_node.is_jumping = is_jumping
+						player_node.is_falling = my_position.y < GROUND_Y and velocity_y > 0
+						if is_moving_left:
+								player_node.face_left(true)
+						elif is_moving_right:
+								player_node.face_left(false)
 
 
 func start() -> void:
@@ -173,35 +206,31 @@ func set_player_list(player_array: Array) -> void:
 						update_player_label(p["id"], p["name"])
 
 
+const PLAYER_SCENE = preload("res://scene/player.tscn")
+
+
 func create_player_sprite(player_id: String, player_name: String, pos: Dictionary) -> void:
 		if not _canvas:
 				return
-		
-		var sprite = ColorRect.new()
-		sprite.size = Vector2(50, 50)
+
+		var player_node = PLAYER_SCENE.instantiate()
 		var world_pos = Vector2(pos.get("x", 400), pos.get("y", GROUND_Y))
 		var screen_pos = world_pos - camera_offset
-		sprite.position = Vector2(screen_pos.x - SPRITE_HALF_HEIGHT, screen_pos.y - SPRITE_HALF_HEIGHT)
+		player_node.position = Vector2(screen_pos.x - SPRITE_HALF_HEIGHT, screen_pos.y - SPRITE_HALF_HEIGHT)
+		
+		player_node.set_player_name(player_name)
 		
 		if player_id == my_id:
-				sprite.color = Color(0.2, 0.8, 0.2)
+				player_node.set_color(Color(0.2, 0.8, 0.2))
 		else:
-				sprite.color = Color(0.8, 0.2, 0.2)
+				player_node.set_color(Color(1, 1, 1)) # Other players are not tinted
 		
-		_canvas.add_child(sprite)
-		
-		var label = Label.new()
-		label.text = player_name
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		label.position = sprite.position + Vector2(-50, -30)
-		label.size = Vector2(150, 30)
-		label.add_theme_font_size_override("font_size", 14)
-		_canvas.add_child(label)
+		_canvas.add_child(player_node)
 		
 		player_nodes[player_id] = {
-				"sprite": sprite,
-				"label": label,
-				"target_pos": world_pos
+				"node": player_node,
+				"target_pos": world_pos,
+				"last_pos": world_pos
 		}
 		
 		print("[GAME] Created sprite for player: ", player_name, " at ", world_pos)
@@ -214,16 +243,13 @@ func update_player_position(player_id: String, pos: Dictionary) -> void:
 
 
 func update_player_label(player_id: String, player_name: String) -> void:
-		if player_nodes.has(player_id) and player_nodes[player_id].label:
-				player_nodes[player_id].label.text = player_name
+		if player_nodes.has(player_id):
+				player_nodes[player_id].node.set_player_name(player_name)
 
 
 func remove_player_sprite(player_id: String) -> void:
 		if player_nodes.has(player_id):
-				if player_nodes[player_id].sprite:
-						player_nodes[player_id].sprite.queue_free()
-				if player_nodes[player_id].label:
-						player_nodes[player_id].label.queue_free()
+				player_nodes[player_id].node.queue_free()
 				player_nodes.erase(player_id)
 
 
