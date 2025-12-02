@@ -220,5 +220,5 @@ animations = [{
 }],
 "loop": false,
 "name": &"turn_around",
-"speed": 10.0
+"speed": 5.0
 }]
