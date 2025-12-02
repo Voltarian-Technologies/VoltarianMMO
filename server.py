@@ -234,6 +234,7 @@ async def handle_client(ws):
             elif typ == "position_update":
                 x = data.get("x", player_data["position"]["x"])
                 y = data.get("y", player_data["position"]["y"])
+                animation_id = data.get("animation_id") # Get animation_id
 
                 player_data["position"]["x"] = x
                 player_data["position"]["y"] = y
@@ -243,10 +244,11 @@ async def handle_client(ws):
                     {
                         "type": "position_update",
                         "player_id": player_uuid,
-                        "position": player_data["position"]
+                        "position": player_data["position"],
+                        "animation_id": animation_id # Include animation_id in broadcast
                     },
                     except_ws=ws)
-                print(f"[POS UPDATE] {player_data['display_name']} -> x={x}, y={y}")
+                print(f"[POS UPDATE] {player_data['display_name']} -> x={x}, y={y}, anim={animation_id}")
 
             else:
                 print("[WARN] Unknown type:", typ)

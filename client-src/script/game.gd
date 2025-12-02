@@ -109,7 +109,7 @@ func _process(delta: float) -> void:
 						is_boost_jumping = false # Reset boost jumping flag on landing
 		
 		if player_nodes.has(my_id):
-				player_nodes[my_id].target_pos = my_position
+				player_nodes[my_id]["target_pos"] = my_position
 		
 		if my_position.distance_to(last_sent_position) > POSITION_SEND_THRESHOLD:
 				_send_position_update()
@@ -134,7 +134,7 @@ func _process(delta: float) -> void:
 				if not is_instance_valid(player_node):
 						continue
 
-				var screen_pos = node_data.target_pos - camera_offset
+				var screen_pos = node_data["target_pos"] - camera_offset
 				var target_sprite_pos = Vector2(screen_pos.x - SPRITE_HALF_HEIGHT, screen_pos.y - SPRITE_HALF_HEIGHT)
 				
 				if player_id == my_id:
@@ -142,27 +142,32 @@ func _process(delta: float) -> void:
 				else:
 						player_node.position = player_node.position.lerp(target_sprite_pos, delta * 10.0)
 
-				var velocity = (node_data.target_pos - node_data.last_pos) / delta
-				node_data.last_pos = node_data.target_pos
+				# Update animation based on received animation_id
+				var received_animation_id = node_data["animation_id"]
 
-				if abs(velocity.x) > 1.0:
+				player_node.is_moving = false
+				player_node.is_jumping = false
+				player_node.is_falling = false
+				player_node.is_turning = false
+
+				if received_animation_id == "run":
 						player_node.is_moving = true
-						if velocity.x < 0:
-								player_node.face_left(true)
-						else:
-								player_node.face_left(false)
-				else:
-						player_node.is_moving = false
-
-				if velocity.y < -1.0:
+				elif received_animation_id == "jump":
 						player_node.is_jumping = true
-						player_node.is_falling = false
-				elif velocity.y > 1.0:
-						player_node.is_jumping = false
+				elif received_animation_id == "fall":
 						player_node.is_falling = true
-				else:
-						player_node.is_jumping = false
-						player_node.is_falling = false
+				elif received_animation_id == "turn_around":
+						player_node.is_turning = true
+				
+				# Face direction based on velocity for other players, if not turning.
+				# This helps smooth out movement even with interpolated positions.
+				var velocity = (node_data["target_pos"] - node_data["last_pos"]) / delta
+				node_data["last_pos"] = node_data["target_pos"]
+				if not player_node.is_turning:
+					if velocity.x < 0:
+							player_node.face_left(true)
+					elif velocity.x > 0:
+							player_node.face_left(false)
 
 				if player_id == my_id:
 						var player_node_local = player_node # Renamed for clarity within this scope
@@ -266,7 +271,8 @@ func create_player_sprite(player_id: String, player_name: String, pos: Dictionar
 		player_nodes[player_id] = {
 				"node": player_node,
 				"target_pos": world_pos,
-				"last_pos": world_pos
+				"last_pos": world_pos,
+				"animation_id": "idle" # Initialize animation_id
 		}
 		
 		print("[GAME] Created sprite for player: ", player_name, " at ", world_pos)
@@ -290,7 +296,35 @@ func remove_player_sprite(player_id: String) -> void:
 
 
 func handle_network_message(msg: Dictionary) -> void:
-		if has_node("HBoxContainer/RichTextLabel"):
+		var type = msg.get("type")
+
+		if type == "player_list":
+				set_player_list(msg["players"])
+				# Update local player's position if it's the first time receiving player_list
+				if my_id == "" and not msg["players"].is_empty():
+					my_id = msg["players"][0]["id"] # Assuming first player in list is local player for now
+					set_my_position(Vector2(msg["players"][0]["position"]["x"], msg["players"][0]["position"]["y"]))
+					print("[GAME] My ID set to: ", my_id)
+		elif type == "init":
+				my_id = msg["id"]
+				set_my_position(Vector2(msg["position"]["x"], msg["position"]["y"]))
+				print("[GAME] Initialized with ID: ", my_id)
+		elif type == "player_joined":
+				# No need to add here, player_list will handle it
+				pass
+		elif type == "player_left":
+				remove_player_sprite(msg["id"])
+		elif type == "player_name_changed":
+				update_player_label(msg["id"], msg["name"])
+		elif type == "position_update":
+				var player_id = msg["player_id"]
+				var new_pos = msg["position"]
+				var animation_id = msg.get("animation_id", "idle") # Get animation_id
+
+				if player_nodes.has(player_id):
+						player_nodes[player_id].target_pos = Vector2(new_pos["x"], new_pos["y"])
+						player_nodes[player_id]["animation_id"] = animation_id # Update animation_id
+		elif has_node("HBoxContainer/RichTextLabel"):
 				$HBoxContainer/RichTextLabel.add_text(str(msg["name"]) + "\n")
 
 
@@ -312,11 +346,29 @@ func action_jump() -> void:
 			_emit_packet(packet)
 
 
+func get_local_animation_id() -> String:
+		if not player_nodes.has(my_id) or not player_nodes[my_id].has("node"):
+			return "idle" # Return default if player node not yet available
+
+		var player_node_local = player_nodes[my_id].node # Get local player node
+
+		if player_node_local.is_turning:
+			return "turn_around"
+		elif player_node_local.is_falling:
+			return "fall"
+		elif player_node_local.is_jumping:
+			return "jump"
+		elif player_node_local.is_moving:
+			return "run"
+		else:
+			return "idle"
+
 func _send_position_update() -> void:
 		var packet: Dictionary = {
 				"type": "position_update",
 				"x": my_position.x,
-				"y": my_position.y
+				"y": my_position.y,
+				"animation_id": get_local_animation_id() # Include current animation
 		}
 		_emit_packet(packet)
 
@@ -336,7 +388,7 @@ func set_my_position(pos: Vector2) -> void:
 	last_sent_position = my_position
 	# Make sure local player sprite interpolation updates to new position
 	if player_nodes.has(my_id):
-		player_nodes[my_id].target_pos = my_position
+		player_nodes[my_id]["target_pos"] = my_position
 	# Apply proper state for reconnects: if player is above ground, ensure gravity will apply
 	if my_position.y < GROUND_Y:
 		is_jumping = true
